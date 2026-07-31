@@ -168,20 +168,24 @@ const CHECKLIST = [
 
 /* Default scenario library — placeholder titles.
    Edit, delete, or add your department's actual scenarios in
-   Settings → Scenario Library (changes are saved on the device). */
+   Settings → Scenario Library (changes are saved on the device).
+
+   `cats` lists the checklist categories a scenario is designed to
+   test. When a scenario is added to a training day, lines in those
+   categories are pre-suggested as "Expected" on the Grade tab. */
 const DEFAULT_SCENARIOS = [
-  "Traffic Stop — Compliant Driver",
-  "Traffic Stop — Armed Driver",
-  "Domestic Dispute — Verbal",
-  "Domestic Dispute — Physical",
-  "Mental Health Crisis — Suicidal Subject",
-  "Disorderly Subject — Business Complaint",
-  "Suspicious Person — Terry Stop",
-  "Shoplifting / Theft in Progress",
-  "Felony Warrant Arrest",
-  "Trespassing Complaint",
-  "Welfare Check",
-  "Active Resistance / Use of Force",
+  { name: "Traffic Stop — Compliant Driver", cats: ["cs", "lf", "os", "pe"] },
+  { name: "Traffic Stop — Armed Driver", cats: ["cs", "lf", "os", "uf", "ap"] },
+  { name: "Domestic Dispute — Verbal", cats: ["cs", "de", "sm", "pe"] },
+  { name: "Domestic Dispute — Physical", cats: ["de", "os", "ap", "uf", "sm"] },
+  { name: "Mental Health Crisis — Suicidal Subject", cats: ["de", "cs", "lf", "pe"] },
+  { name: "Disorderly Subject — Business Complaint", cats: ["cs", "de", "lf", "sm"] },
+  { name: "Suspicious Person — Terry Stop", cats: ["lf", "os", "cs"] },
+  { name: "Shoplifting / Theft in Progress", cats: ["lf", "sm", "ap", "rd"] },
+  { name: "Felony Warrant Arrest", cats: ["ap", "os", "lf", "uf"] },
+  { name: "Trespassing Complaint", cats: ["lf", "cs", "sm"] },
+  { name: "Welfare Check", cats: ["de", "cs", "os"] },
+  { name: "Active Resistance / Use of Force", cats: ["uf", "ap", "os", "rd"] },
 ];
 
 const WEIGHT_LABELS = { 3: "Critical", 2: "Core", 1: "Minor" };

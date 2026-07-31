@@ -334,8 +334,81 @@ ul.clean { padding-left: 18px; margin: 6px 0; }
   font-size: 13px; font-weight: 600; margin-bottom: 12px;
 }
 
+.list-head { margin: 18px 4px 8px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* ---------- sync status dot ---------- */
+.sync-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-left: 4px; background: var(--muted); vertical-align: middle; }
+.sync-dot.on { background: #34d399; }
+.sync-dot.err { background: #f87171; }
+.sync-dot.off { background: #9ca3af; }
+
+/* ---------- trainers & voting ---------- */
+.chip.pick { border: 1.5px solid var(--line); background: #fff; color: var(--text); cursor: pointer; }
+.chip.pick.sel { background: var(--navy); border-color: var(--navy); color: #fff; }
+.voter-card { padding: 12px 14px; }
+.votes .vbtn.sel { border-style: solid; border-width: 2px; }
+.votes .vbtn.vp.sel { border-color: var(--pass); background: var(--pass-soft); }
+.votes .vbtn.vf.sel { border-color: var(--fail); background: var(--fail-soft); }
+.votes .vbtn.vno { flex: 0 0 64px; color: var(--no); }
+.votes .vbtn.vno.sel { border-color: var(--no); background: var(--no-soft); border-style: solid; }
+.tmarks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tmark { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 3px 7px; }
+.tmark.tp { background: var(--pass-soft); color: var(--pass); }
+.tmark.tf { background: var(--fail-soft); color: var(--fail); }
+
+/* ---------- suggestions ---------- */
+.badge.exp { background: #e7e5f9; color: #5b4fc4; }
+.exp-why { font-size: 12px; color: #5b4fc4; margin: 2px 0 8px; }
+.rec-why .dismiss { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; padding: 0 4px; }
+
+/* ---------- officer profile ---------- */
+.day-item.flat { box-shadow: none; border: 1px solid var(--line); }
+.stat-row { display: flex; gap: 10px; margin-bottom: 12px; }
+.stat { flex: 1; text-align: center; background: var(--bg); border-radius: 10px; padding: 10px 4px; }
+.stat .v { font-size: 22px; font-weight: 800; }
+.stat .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.spark { width: 100%; height: 70px; display: block; }
+.spark-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.spark-th { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
+.spark-pt.good { fill: var(--pass); }
+.spark-pt.bad { fill: var(--fail); }
+
+/* ---------- settings: scenario category mapping ---------- */
+.lib-item .nm.as-btn { background: none; border: none; text-align: left; font-size: 14px; color: var(--text); cursor: pointer; padding: 0; flex: 1; }
+.lib-item-wrap { border-top: 1px solid var(--line); }
+.lib-item-wrap:first-of-type { border-top: none; }
+.lib-item-wrap .lib-item { border-top: none; }
+.cat-picker { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 12px; }
+.cat-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; border: 1.5px solid var(--line); border-radius: 999px; padding: 5px 10px; cursor: pointer; color: var(--muted); }
+.cat-check input { width: auto; margin: 0; }
+.cat-check.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* ---------- voice notes ---------- */
+.note-input-wrap { position: relative; }
+.note-input-wrap textarea { padding-right: 48px; }
+.mic-btn { position: absolute; right: 8px; bottom: 8px; background: var(--no-soft); border: none; border-radius: 50%; width: 38px; height: 38px; font-size: 17px; cursor: pointer; }
+.mic-btn.rec { background: var(--fail); animation: pulse 1.2s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(198,40,40,0.5); } 70% { box-shadow: 0 0 0 10px rgba(198,40,40,0); } 100% { box-shadow: 0 0 0 0 rgba(198,40,40,0); } }
+
+/* ---------- printable official form ---------- */
+#print-root { display: none; }
+
 @media print {
-  .topbar, .tabbar, .btn, #toast { display: none !important; }
+  #app, #toast, .topbar, .tabbar { display: none !important; }
   body { background: #fff; padding-bottom: 0; }
-  .card, .cat { box-shadow: none; border: 1px solid #ccc; }
+  #print-root { display: block; font-size: 11px; color: #000; }
+  .pf-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; font-size: 13px; }
+  .pf-title { text-align: right; }
+  table.pf-fields { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+  table.pf-fields td { border: 1px solid #000; padding: 4px 6px; }
+  .pf-score { border: 2px solid #000; padding: 6px 8px; font-size: 13px; margin: 6px 0; }
+  table.pf-cat { width: 100%; border-collapse: collapse; margin-bottom: 8px; page-break-inside: avoid; }
+  table.pf-cat th { background: #444; color: #fff; border: 1px solid #000; padding: 3px 6px; font-size: 11px; text-align: left; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  table.pf-cat td { border: 1px solid #000; padding: 3px 6px; vertical-align: top; }
+  td.pf-mark, table.pf-cat th:nth-child(2), table.pf-cat th:nth-child(3), table.pf-cat th:nth-child(4) { width: 38px; text-align: center; font-weight: 700; }
+  .pf-notes { width: 22%; }
+  .pf-name em { font-style: normal; color: #555; }
+  .pf-block { margin-top: 8px; page-break-inside: avoid; }
+  .pf-block ul { margin: 4px 0; padding-left: 18px; }
+  .pf-other { border: 1px solid #000; min-height: 60px; padding: 4px 6px; margin-top: 4px; }
 }

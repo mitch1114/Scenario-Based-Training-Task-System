@@ -1,0 +1,15 @@
+{
+  "name": "Scenario-Based Training — Dublin PD",
+  "short_name": "SBT Grading",
+  "description": "Scenario day grading tool for the Dublin Police Department scenario-based training task sheet.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14213d",
+  "theme_color": "#14213d",
+  "icons": [
+    { "src": "icons/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
