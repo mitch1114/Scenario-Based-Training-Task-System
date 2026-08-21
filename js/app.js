@@ -30,6 +30,12 @@
   function nowISO() {
     return new Date().toISOString();
   }
+  /* stable id for library scenarios so every device generates the
+     same id for the same default scenario (prevents duplicates
+     when several phones sync to the shared backend) */
+  function scenarioIdFor(name) {
+    return "scn-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  }
 
   /* ---------- persistence & migration ---------- */
   function freshDB() {
@@ -38,9 +44,10 @@
       settings: { threshold: 80, deviceTrainer: "", sync: { url: "", key: "" } },
       officers: [],
       scenarios: DEFAULT_SCENARIOS.map(function (s) {
-        return { id: uid(), name: s.name, cats: s.cats.slice(), updatedAt: nowISO() };
+        return { id: scenarioIdFor(s.name), name: s.name, cats: s.cats.slice(), updatedAt: nowISO() };
       }),
       days: [],
+      libVersion: 2,
     };
   }
 
@@ -58,6 +65,30 @@
       if (!s.cats) s.cats = [];
       if (!s.updatedAt) s.updatedAt = nowISO();
     });
+
+    /* library v2: swap the original placeholder scenarios for the
+       real Dublin PD master list. Placeholders referenced by saved
+       training days are kept so those records stay intact. */
+    if ((db.libVersion || 1) < 2) {
+      var usedIds = {};
+      db.days.forEach(function (d) {
+        (d.scenarioIds || []).forEach(function (id) { usedIds[id] = true; });
+      });
+      db.scenarios = db.scenarios.filter(function (s) {
+        return RETIRED_PLACEHOLDER_SCENARIOS.indexOf(s.name) === -1 || usedIds[s.id];
+      });
+      var haveNames = {};
+      db.scenarios.forEach(function (s) { haveNames[s.name.toLowerCase()] = true; });
+      DEFAULT_SCENARIOS.forEach(function (ds) {
+        if (!haveNames[ds.name.toLowerCase()]) {
+          db.scenarios.push({
+            id: scenarioIdFor(ds.name), name: ds.name,
+            cats: ds.cats.slice(), updatedAt: nowISO(),
+          });
+        }
+      });
+      db.libVersion = 2;
+    }
 
     db.days.forEach(function (d) {
       if (!d.updatedAt) d.updatedAt = d.createdAt || nowISO();
@@ -746,6 +777,13 @@
       '<div class="card"><h2>Scenarios Run Today <span class="muted">(' + day.scenarioIds.length + ")</span></h2>" +
       '<p class="muted">Add each scenario used today (typically 6–10). The categories each scenario tests get pre-suggested on the Grade tab.</p>' +
       '<div style="display:flex;gap:8px;">' +
+      '<select id="preset-select"><option value="">— Quick add: FTO practical day —</option>' +
+      DEFAULT_PRESETS.map(function (p, i) {
+        return '<option value="' + i + '">' + esc(p.name) + " (" + p.scenarios.length + " scenarios)</option>";
+      }).join("") +
+      "</select>" +
+      '<button class="btn sm" data-action="add-preset" style="flex-shrink:0;"' + (day.finalized ? " disabled" : "") + ">Add</button></div>" +
+      '<div style="display:flex;gap:8px;margin-top:8px;">' +
       '<select id="scenario-select"><option value="">— Select a scenario —</option>' + options + "</select>" +
       '<button class="btn sm" data-action="add-day-scenario" style="flex-shrink:0;"' + (day.finalized ? " disabled" : "") + ">Add</button></div>" +
       '<div class="chips">' +
@@ -1279,6 +1317,30 @@
           rerenderKeepScroll();
         }
         break;
+
+      case "add-preset": {
+        var psel = document.getElementById("preset-select");
+        if (!day || day.finalized || !psel || psel.value === "") break;
+        var preset = DEFAULT_PRESETS[parseInt(psel.value, 10)];
+        if (!preset) break;
+        var added = 0, missing = 0;
+        preset.scenarios.forEach(function (nm) {
+          var match = null;
+          DB.scenarios.forEach(function (s) {
+            if (s.name.toLowerCase() === nm.toLowerCase()) match = s;
+          });
+          if (!match) { missing++; return; }
+          if (day.scenarioIds.indexOf(match.id) === -1) {
+            day.scenarioIds.push(match.id);
+            added++;
+          }
+        });
+        saveDay(day);
+        rerenderKeepScroll();
+        toast("Added " + added + " scenario" + (added === 1 ? "" : "s") +
+          (missing ? " (" + missing + " not found in library)" : ""));
+        break;
+      }
 
       case "add-day-scenario": {
         var sel = document.getElementById("scenario-select");

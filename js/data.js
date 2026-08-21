@@ -166,26 +166,135 @@ const CHECKLIST = [
   },
 ];
 
-/* Default scenario library — placeholder titles.
-   Edit, delete, or add your department's actual scenarios in
-   Settings → Scenario Library (changes are saved on the device).
+/* Dublin PD scenario library — from the Scenarios Master List and
+   the FTO Practical Day #1–#3 sheets.
+   Edit, add, or remap in Settings → Scenario Library.
 
    `cats` lists the checklist categories a scenario is designed to
-   test. When a scenario is added to a training day, lines in those
-   categories are pre-suggested as "Expected" on the Grade tab. */
+   test (drawn from each scenario's "Looking for…" line). When a
+   scenario is added to a training day, lines in those categories
+   are pre-suggested as "Expected" on the Grade tab. */
 const DEFAULT_SCENARIOS = [
-  { name: "Traffic Stop — Compliant Driver", cats: ["cs", "lf", "os", "pe"] },
-  { name: "Traffic Stop — Armed Driver", cats: ["cs", "lf", "os", "uf", "ap"] },
-  { name: "Domestic Dispute — Verbal", cats: ["cs", "de", "sm", "pe"] },
-  { name: "Domestic Dispute — Physical", cats: ["de", "os", "ap", "uf", "sm"] },
-  { name: "Mental Health Crisis — Suicidal Subject", cats: ["de", "cs", "lf", "pe"] },
-  { name: "Disorderly Subject — Business Complaint", cats: ["cs", "de", "lf", "sm"] },
-  { name: "Suspicious Person — Terry Stop", cats: ["lf", "os", "cs"] },
-  { name: "Shoplifting / Theft in Progress", cats: ["lf", "sm", "ap", "rd"] },
-  { name: "Felony Warrant Arrest", cats: ["ap", "os", "lf", "uf"] },
-  { name: "Trespassing Complaint", cats: ["lf", "cs", "sm"] },
-  { name: "Welfare Check", cats: ["de", "cs", "os"] },
-  { name: "Active Resistance / Use of Force", cats: ["uf", "ap", "os", "rd"] },
+  { name: "Sovereign Citizen", cats: ["cs", "de", "lf", "pe"] },
+  { name: "\"Daddy's Drunk\" (Daycare)", cats: ["cs", "de", "lf", "sm"] },
+  { name: "\"When Wives Attack\" (Domestic)", cats: ["cs", "os", "uf", "ap", "sm"] },
+  { name: "Burglar", cats: ["lf", "os", "ap", "sm"] },
+  { name: "Juvenile Party", cats: ["lf", "os", "sm"] },
+  { name: "\"Party Girl\" (Missing Juvenile)", cats: ["cs", "lf", "sm"] },
+  { name: "\"Sunglasses\"", cats: ["lf", "os", "cs", "sm"] },
+  { name: "\"Bloody Hands\"", cats: ["os", "sm", "lf", "rd"] },
+  { name: "Hitch Hiker / Stranded Motorist", cats: ["lf", "os"] },
+  { name: "\"Wrestle-Mania\"", cats: ["os", "uf", "ap", "de"] },
+  { name: "\"Won't Do FSTs\"", cats: ["lf", "ap", "uf", "os", "rd"] },
+  { name: "4 Felons (Traffic Stop)", cats: ["os", "de"] },
+  { name: "\"Hostage\" (Domestic)", cats: ["os", "uf", "de", "sm"] },
+  { name: "\"Suicide By Cop\" (Traffic Stop / Gun To Head)", cats: ["de", "cs", "os", "uf"] },
+  { name: "Felony Stop — \"The Invisible Man\"", cats: ["os", "ap", "uf"] },
+  { name: "Drunk Fight", cats: ["os", "sm", "uf", "ap"] },
+  { name: "\"Sports Talk\" (Verbal Argument)", cats: ["cs", "de", "os"] },
+  { name: "\"Window Shopping\" (60 Looking In Cars)", cats: ["cs", "os", "lf"] },
+  { name: "\"Shoot Me\" (96)", cats: ["de", "os", "uf"] },
+  { name: "\"Onion Field\"", cats: ["os", "uf", "de"] },
+  { name: "\"Walk Away\" (Traffic Stop)", cats: ["os", "ap", "uf", "lf", "cs"] },
+  { name: "\"I Don't Want Anything To Do With It\" (Vehicle Passenger)", cats: ["os", "lf", "cs"] },
+  { name: "\"Who's Your Daddy\" (Custody Dispute)", cats: ["cs", "lf", "sm"] },
+  { name: "\"Who's Your Daddy Part II\" (Custody Dispute)", cats: ["cs", "lf", "sm"] },
+  { name: "\"Take The Property and Run\" (Restraining Order)", cats: ["lf", "cs", "sm", "pe"] },
+  { name: "DV From Hell", cats: ["os", "lf", "ap", "sm", "rd"] },
+  { name: "\"Parkers\"", cats: ["os", "de", "sm", "uf"] },
+  { name: "\"Won't Sign Ticket\"", cats: ["cs", "lf", "pe"] },
+  { name: "\"Pissed Off Passenger\"", cats: ["cs", "os", "lf", "de"] },
+  { name: "\"Men With Guns\"", cats: ["os", "lf", "cs"] },
+  { name: "Felony Stop", cats: ["os", "ap", "lf"] },
+  { name: "Building Search (Subject Inside)", cats: ["os", "ap"] },
+  { name: "\"Bad Advise\" — Partner From Hell (Theft)", cats: ["lf", "pe", "cs"] },
+  { name: "\"He Did What?\" — Partner From Hell (Officer Safety)", cats: ["os", "pe"] },
+  { name: "\"Outnumbered\"", cats: ["os", "de"] },
+  { name: "Jail Processing", cats: ["os", "ap"] },
+  { name: "FSTs With An Audience", cats: ["cs", "os", "sm"] },
+  { name: "\"Is It Worth It?\"", cats: ["lf", "pe", "cs"] },
+  { name: "\"Bloody Nose\" (Domestic)", cats: ["lf", "sm", "rd", "ap"] },
+  { name: "\"Pizza Guy\"", cats: ["os", "sm", "lf"] },
+  { name: "\"Help Me\"", cats: ["os", "sm", "cs"] },
+  { name: "Hitchhiker (Freeway)", cats: ["lf", "os"] },
+  { name: "\"Jail Bait\"", cats: ["cs", "lf", "sm"] },
+  { name: "\"All In The Family\" (DV)", cats: ["cs", "os", "sm", "de"] },
+  { name: "Same Sex DV", cats: ["cs", "lf", "sm", "pe"] },
+  { name: "\"You Smell That?\"", cats: ["lf", "sm", "rd"] },
+  { name: "Protection Order", cats: ["lf", "sm", "rd"] },
+  { name: "Suicidal With Knife", cats: ["de", "os", "uf"] },
+  { name: "\"Kehoe\"", cats: ["os", "uf", "ap", "lf"] },
+  { name: "\"Run Someone Run\"", cats: ["lf", "os"] },
+  { name: "Shoplifting", cats: ["lf", "sm", "os"] },
+  { name: "\"Man of Mystery\"", cats: ["lf", "sm", "cs"] },
+  { name: "Rolling DV", cats: ["sm", "lf", "cs"] },
+  { name: "\"Double Shot\" (Parking Cite / 90)", cats: ["sm", "os", "cs"] },
+  { name: "\"Directions\"", cats: ["os", "de"] },
+  { name: "\"Pink Slip\"", cats: ["de", "lf", "cs", "ap"] },
+  { name: "Detective Scenario", cats: ["lf", "sm", "rd"] },
+  { name: "\"He Drunk\"", cats: ["lf", "os", "ap", "cs"] },
+  { name: "\"You See That?\"", cats: ["os", "lf", "cs"] },
+];
+
+/* Old placeholder names (pre-master-list builds). On upgrade,
+   unused placeholders are removed from saved libraries. */
+const RETIRED_PLACEHOLDER_SCENARIOS = [
+  "Traffic Stop — Compliant Driver",
+  "Traffic Stop — Armed Driver",
+  "Domestic Dispute — Verbal",
+  "Domestic Dispute — Physical",
+  "Mental Health Crisis — Suicidal Subject",
+  "Disorderly Subject — Business Complaint",
+  "Suspicious Person — Terry Stop",
+  "Shoplifting / Theft in Progress",
+  "Felony Warrant Arrest",
+  "Trespassing Complaint",
+  "Welfare Check",
+  "Active Resistance / Use of Force",
+];
+
+/* FTO practical day sheets — one tap on Setup adds the whole set. */
+const DEFAULT_PRESETS = [
+  {
+    name: "FTO Practical Day #1",
+    scenarios: [
+      "DV From Hell",
+      "Detective Scenario",
+      "Hitch Hiker / Stranded Motorist",
+      "\"Walk Away\" (Traffic Stop)",
+      "\"You Smell That?\"",
+      "Suicidal With Knife",
+      "\"He Drunk\"",
+      "\"Onion Field\"",
+    ],
+  },
+  {
+    name: "FTO Practical Day #2",
+    scenarios: [
+      "\"Bloody Nose\" (Domestic)",
+      "\"Daddy's Drunk\" (Daycare)",
+      "\"Man of Mystery\"",
+      "\"Pink Slip\"",
+      "\"Pissed Off Passenger\"",
+      "\"Sunglasses\"",
+      "\"Who's Your Daddy\" (Custody Dispute)",
+      "\"Won't Do FSTs\"",
+    ],
+  },
+  {
+    name: "FTO Practical Day #3",
+    scenarios: [
+      "\"All In The Family\" (DV)",
+      "\"You See That?\"",
+      "Rolling DV",
+      "\"Run Someone Run\"",
+      "\"Double Shot\" (Parking Cite / 90)",
+      "\"He Did What?\" — Partner From Hell (Officer Safety)",
+      "\"Pizza Guy\"",
+      "\"Parkers\"",
+      "\"Bloody Hands\"",
+    ],
+  },
 ];
 
 const WEIGHT_LABELS = { 3: "Critical", 2: "Core", 1: "Minor" };
