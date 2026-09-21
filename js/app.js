@@ -9,7 +9,7 @@
   "use strict";
 
   var STORE_KEY = "sbt-task-system-v1";
-  var DB_VERSION = 2;
+  var DB_VERSION = 3;
 
   /* ---------- flat line index ---------- */
   var ALL_LINES = [];
@@ -102,9 +102,25 @@
       }
       if (!d.dismissedRecs) d.dismissedRecs = {};
       if (d.officerId === undefined) d.officerId = null;
+      if (!d.notes) d.notes = [];
+      /* v3: notes are bullet points. Older narrative notes that
+         contain line breaks are split into one bullet per line
+         (ids stay deterministic so every synced device agrees). */
+      if ((db.version || 1) < 3) {
+        var split = [];
+        d.notes.forEach(function (n) {
+          var parts = splitBullets(n.text || "");
+          if (parts.length <= 1) { split.push(n); return; }
+          parts.forEach(function (t, i) {
+            split.push({ id: n.id + "-" + i, scenarioId: n.scenarioId, text: t, ts: n.ts });
+          });
+        });
+        d.notes = split;
+      }
       Object.keys(d.lines || {}).forEach(function (id) {
         var ls = d.lines[id];
         if (!ls.votes) ls.votes = {};
+        if (!ls.noteIds) ls.noteIds = [];
         // v1 anonymous tallies (vp/vf) can't be attributed — drop counters, keep result
         delete ls.vp;
         delete ls.vf;
@@ -117,6 +133,13 @@
 
     db.version = DB_VERSION;
     return db;
+  }
+
+  /* one bullet per non-empty line; leading "-", "•", "*" markers are stripped */
+  function splitBullets(text) {
+    return String(text || "").split(/\r?\n/).map(function (t) {
+      return t.replace(/^\s*[-•*·]\s*/, "").trim();
+    }).filter(Boolean);
   }
 
   function findOrCreateOfficerIn(db, name, badge) {
@@ -173,7 +196,7 @@
     voteMode: false,
     activeTrainer: "",
     openNotes: {}, // lineId -> line-note textarea revealed
-    libOpen: {}, // scenarioId -> category editor expanded
+    openPickers: {}, // lineId -> observation picker expanded
   };
 
   function currentDay() {
@@ -221,8 +244,9 @@
 
   function lineState(day, lineId) {
     if (!day.lines[lineId])
-      day.lines[lineId] = { status: null, votes: {}, note: "" };
+      day.lines[lineId] = { status: null, votes: {}, note: "", noteIds: [] };
     if (!day.lines[lineId].votes) day.lines[lineId].votes = {};
+    if (!day.lines[lineId].noteIds) day.lines[lineId].noteIds = [];
     return day.lines[lineId];
   }
 
@@ -273,21 +297,23 @@
     saveOfficer(prof);
   }
 
-  /* ---------- suggestions: note keywords + scenario mapping ---------- */
+  /* ---------- suggestions: note-bullet keyword matches ---------- */
+  function noteById(day, id) {
+    for (var i = 0; i < day.notes.length; i++)
+      if (day.notes[i].id === id) return day.notes[i];
+    return null;
+  }
+
+  /* every keyword hit: lineId -> [{note, kw}] (all bullets, unfiltered) */
   function computeRecs(day) {
-    var recs = {}; // lineId -> [{kw, snippet, scenarioId}]
+    var recs = {};
     day.notes.forEach(function (note) {
       var text = " " + note.text.toLowerCase() + " ";
       ALL_LINES.forEach(function (ln) {
         for (var k = 0; k < ln.kw.length; k++) {
-          var kw = ln.kw[k].toLowerCase();
-          if (text.indexOf(kw) !== -1) {
+          if (text.indexOf(ln.kw[k].toLowerCase()) !== -1) {
             if (!recs[ln.id]) recs[ln.id] = [];
-            recs[ln.id].push({
-              kw: ln.kw[k].trim(),
-              scenarioId: note.scenarioId,
-              snippet: note.text.length > 70 ? note.text.slice(0, 70) + "…" : note.text,
-            });
+            recs[ln.id].push({ note: note, kw: ln.kw[k].trim() });
             break;
           }
         }
@@ -296,22 +322,48 @@
     return recs;
   }
 
-  /* lines expected because a selected scenario tests their category */
-  function computeExpected(day) {
-    var byCat = {}; // catId -> [scenario names]
-    day.scenarioIds.forEach(function (id) {
-      var s = scenarioById(id);
-      if (!s || !s.cats) return;
-      s.cats.forEach(function (c) {
-        if (!byCat[c]) byCat[c] = [];
-        if (byCat[c].indexOf(s.name) === -1) byCat[c].push(s.name);
-      });
+  /* a recommendation can be dismissed per bullet or for the whole line */
+  function recDismissed(day, lineId, noteId) {
+    return !!(day.dismissedRecs[lineId] || day.dismissedRecs[lineId + "|" + noteId]);
+  }
+
+  /* recommended bullets still worth showing on a line: not dismissed,
+     not already linked to it */
+  function openRecs(day, lineId, recs) {
+    var linked = (day.lines[lineId] && day.lines[lineId].noteIds) || [];
+    return (recs[lineId] || []).filter(function (r) {
+      return !recDismissed(day, lineId, r.note.id) && linked.indexOf(r.note.id) === -1;
     });
-    var expected = {}; // lineId -> [scenario names]
-    ALL_LINES.forEach(function (ln) {
-      if (byCat[ln.catId]) expected[ln.id] = byCat[ln.catId];
+  }
+
+  function linkedNotes(day, lineId) {
+    var ids = (day.lines[lineId] && day.lines[lineId].noteIds) || [];
+    return ids.map(function (id) { return noteById(day, id); }).filter(Boolean);
+  }
+
+  /* day notes grouped for display: [{scenarioId, label, notes:[...]}] */
+  function notesByScenario(day) {
+    var groups = [];
+    day.scenarioIds.forEach(function (id, i) {
+      groups.push({ scenarioId: id, label: (i + 1) + ". " + scenarioName(id), notes: [] });
     });
-    return expected;
+    var general = { scenarioId: null, label: "General (whole day)", notes: [] };
+    var orphans = {}; // notes tagged to a scenario no longer on the day
+    day.notes.forEach(function (n) {
+      var g = null;
+      for (var i = 0; i < groups.length; i++)
+        if (groups[i].scenarioId === n.scenarioId) g = groups[i];
+      if (!g && n.scenarioId) {
+        if (!orphans[n.scenarioId]) {
+          orphans[n.scenarioId] = { scenarioId: n.scenarioId, label: scenarioName(n.scenarioId) + " (removed from day)", notes: [] };
+          groups.push(orphans[n.scenarioId]);
+        }
+        g = orphans[n.scenarioId];
+      }
+      (g || general).notes.push(n);
+    });
+    groups.push(general);
+    return groups;
   }
 
   function recsForNoteText(text) {
@@ -344,7 +396,7 @@
         } else if (st === "fail") {
           possible += ln.w; cPossible += ln.w;
           cGraded++; failCount++;
-          if (ln.w === 3) criticalFails.push(ln);
+          if (ln.w >= CRITICAL_WEIGHT) criticalFails.push(ln);
         } else if (st === "no") {
           noCount++;
         }
@@ -616,28 +668,12 @@
     // Scenario library
     html +=
       '<div class="card"><h2>Scenario Library</h2>' +
-      '<p class="muted">These appear in the scenario dropdown on day setup. Tap a scenario to set which skill categories it tests — those lines get pre-suggested for grading.</p>';
+      '<p class="muted">These appear in the scenario dropdown on day setup.</p>';
     DB.scenarios.forEach(function (s) {
-      var open = view.libOpen[s.id];
       html +=
-        '<div class="lib-item-wrap">' +
-        '<div class="lib-item"><button class="nm as-btn" data-action="toggle-lib" data-id="' + s.id + '">' +
-        esc(s.name) +
-        ' <span class="muted small">(' + (s.cats && s.cats.length ? s.cats.length + " cats" : "no mapping") + ")</span></button>" +
+        '<div class="lib-item"><span class="nm">' + esc(s.name) + "</span>" +
         '<button class="edit" data-action="edit-scenario" data-id="' + s.id + '">Rename</button>' +
         '<button class="del" data-action="del-scenario" data-id="' + s.id + '">✕</button></div>';
-      if (open) {
-        html += '<div class="cat-picker">';
-        CHECKLIST.forEach(function (cat) {
-          var on = s.cats && s.cats.indexOf(cat.id) !== -1;
-          html +=
-            '<label class="cat-check' + (on ? " on" : "") + '"><input type="checkbox" ' +
-            (on ? "checked " : "") + 'data-action-input="toggle-scn-cat" data-id="' + s.id +
-            '" data-cat="' + cat.id + '">' + esc(cat.name) + "</label>";
-        });
-        html += "</div>";
-      }
-      html += "</div>";
     });
     html +=
       '<div style="display:flex;gap:8px;margin-top:12px;">' +
@@ -651,9 +687,9 @@
       '<label class="field"><span>Passing threshold (% of weighted points)</span>' +
       '<input type="number" min="1" max="100" value="' + DB.settings.threshold +
       '" data-action-input="set-threshold"></label>' +
-      '<p class="muted">Line weights: <span class="badge w3">×3 Critical</span> safety, legal authority &amp; use-of-force lines · ' +
-      '<span class="badge w2">×2 Core</span> standard lines. ' +
-      "Day score = weighted points passed ÷ weighted points graded. Ungraded and N/O lines are excluded. A failed ×3 line fails the day.</p></div>";
+      '<p class="muted">Line weights: <span class="badge w2">×2 Critical</span> safety, legal authority, use-of-force, scene-control &amp; de-escalation lines · ' +
+      '<span class="badge w1">×1 Standard</span> all other lines. ' +
+      "Day score = weighted points passed ÷ weighted points graded. Ungraded and N/O lines are excluded. A failed Critical line fails the day.</p></div>";
 
     // Shared backend
     var syncAvailable = typeof window.supabase !== "undefined";
@@ -775,7 +811,7 @@
 
     html +=
       '<div class="card"><h2>Scenarios Run Today <span class="muted">(' + day.scenarioIds.length + ")</span></h2>" +
-      '<p class="muted">Add each scenario used today (typically 6–10). The categories each scenario tests get pre-suggested on the Grade tab.</p>' +
+      '<p class="muted">Add each scenario used today (typically 6–10). Each one gets its own bullet list on the Notes tab.</p>' +
       '<div style="display:flex;gap:8px;">' +
       '<select id="preset-select"><option value="">— Quick add: FTO practical day —</option>' +
       DEFAULT_PRESETS.map(function (p, i) {
@@ -800,48 +836,65 @@
   }
 
   /* ---------- Notes tab ---------- */
+  function noteHitsHtml(text) {
+    var hits = recsForNoteText(text);
+    if (!hits.length) return "";
+    return '<div class="recs">→ ' +
+      hits.map(function (l) { return CAT_BY_ID[l.catId].name; })
+        .filter(function (v, i, a) { return a.indexOf(v) === i; }).join(", ") +
+      " (" + hits.length + " line" + (hits.length > 1 ? "s" : "") + ")</div>";
+  }
+
   function renderNotesTab(day) {
     var speechOk = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    var dis = day.finalized ? " disabled" : "";
     var html = '<div class="screen">';
+    if (day.finalized)
+      html += '<div class="locked-banner">🔒 Finalized — notes are locked. Un-finalize on the Results tab to edit.</div>';
     html +=
-      '<div class="card"><h2>Add a Note</h2>' +
-      '<p class="muted">Jot observations after each scenario. The Grade tab recommends lines to grade based on what you write.</p>' +
-      '<label class="field"><span>Scenario</span><select id="note-scenario">' +
-      '<option value="">General (whole day)</option>' +
-      day.scenarioIds.map(function (id, i) {
-        return '<option value="' + id + '">' + (i + 1) + ". " + esc(scenarioName(id)) + "</option>";
-      }).join("") +
-      "</select></label>" +
-      '<label class="field"><span>Observation</span>' +
-      '<div class="note-input-wrap"><textarea id="note-text" placeholder="e.g. Struggled to articulate probable cause before the arrest, cuffs not double locked…"></textarea>' +
-      (speechOk
-        ? '<button class="mic-btn" id="mic-btn" data-action="toggle-mic" title="Dictate">🎤</button>'
-        : "") +
-      "</div></label>" +
-      '<button class="btn block" data-action="add-note">Save Note</button>' +
-      "</div>";
+      '<p class="muted" style="margin:0 0 12px;">One short bullet per observation. Each new line becomes its own bullet, ' +
+      "so you can link a single bullet to the exact checklist line it supports on the Grade tab.</p>";
 
-    if (day.notes.length) {
-      html += '<div class="card"><h2>Notes (' + day.notes.length + ")</h2>";
-      day.notes.slice().reverse().forEach(function (n) {
-        var hits = recsForNoteText(n.text);
+    if (!day.scenarioIds.length)
+      html += '<div class="card muted">No scenarios on this day yet — add them on the Setup tab to get a note list per scenario.</div>';
+
+    notesByScenario(day).forEach(function (g) {
+      var key = g.scenarioId || "general";
+      html += '<div class="card note-group"><h2>' + esc(g.label) +
+        ' <span class="muted">(' + g.notes.length + ")</span></h2>";
+      if (g.notes.length) {
+        html += '<ul class="bullets">';
+        g.notes.forEach(function (n) {
+          var used = ALL_LINES.filter(function (ln) {
+            var ls = day.lines[ln.id];
+            return ls && ls.noteIds && ls.noteIds.indexOf(n.id) !== -1;
+          });
+          html +=
+            '<li class="bullet">' +
+            '<div class="bullet-row"><span class="txt">' + esc(n.text) + "</span>" +
+            (day.finalized ? "" : '<button class="del" data-action="del-note" data-id="' + n.id + '" title="Delete">✕</button>') +
+            "</div>" +
+            (used.length
+              ? '<div class="linked-to">🔗 ' + used.map(function (ln) { return esc(ln.text); }).join(" · ") + "</div>"
+              : noteHitsHtml(n.text)) +
+            "</li>";
+        });
+        html += "</ul>";
+      } else {
+        html += '<p class="muted small" style="margin:0 0 8px;">No observations yet.</p>';
+      }
+      if (!day.finalized) {
         html +=
-          '<div class="note-item">' +
-          '<div class="head"><span class="scn">' +
-          (n.scenarioId ? esc(scenarioName(n.scenarioId)) : "General") +
-          "</span><span>" + fmtTime(n.ts) +
-          ' · <button class="del" data-action="del-note" data-id="' + n.id + '">delete</button></span></div>' +
-          '<div class="body">' + esc(n.text) + "</div>" +
-          (hits.length
-            ? '<div class="recs">→ Recommends grading: ' +
-              hits.map(function (l) { return CAT_BY_ID[l.catId].name; })
-                .filter(function (v, i, a) { return a.indexOf(v) === i; }).join(", ") +
-              " (" + hits.length + " line" + (hits.length > 1 ? "s" : "") + ")</div>"
+          '<div class="note-input-wrap"><textarea class="bullet-input" id="note-text-' + key +
+          '" placeholder="Add observation…"' + dis + "></textarea>" +
+          (speechOk
+            ? '<button class="mic-btn" data-action="toggle-mic" data-target="note-text-' + key + '" title="Dictate">🎤</button>'
             : "") +
-          "</div>";
-      });
+          "</div>" +
+          '<button class="btn sm" data-action="add-note" data-scn="' + (g.scenarioId || "") + '" style="margin-top:8px;">＋ Add bullet</button>';
+      }
       html += "</div>";
-    }
+    });
     html += "</div>";
     return html;
   }
@@ -849,12 +902,12 @@
   /* ---------- Grade tab ---------- */
   function renderGradeTab(day) {
     var recs = computeRecs(day);
-    var expected = computeExpected(day);
+    /* lines your notes point at: open recommendations or linked bullets */
     var suggestedIds = {};
-    Object.keys(recs).forEach(function (id) {
-      if (!day.dismissedRecs[id]) suggestedIds[id] = true;
+    ALL_LINES.forEach(function (ln) {
+      if (openRecs(day, ln.id, recs).length || linkedNotes(day, ln.id).length)
+        suggestedIds[ln.id] = true;
     });
-    Object.keys(expected).forEach(function (id) { suggestedIds[id] = true; });
     var sugCount = Object.keys(suggestedIds).length;
     var sc = computeScore(day);
 
@@ -873,7 +926,7 @@
       '<div class="grade-controls">' +
       '<select data-action-input="set-filter">' +
       '<option value="all"' + (view.filter === "all" ? " selected" : "") + ">Show all lines</option>" +
-      '<option value="suggested"' + (view.filter === "suggested" ? " selected" : "") + ">Suggested (" + sugCount + ")</option>" +
+      '<option value="suggested"' + (view.filter === "suggested" ? " selected" : "") + ">From notes (" + sugCount + ")</option>" +
       '<option value="ungraded"' + (view.filter === "ungraded" ? " selected" : "") + ">Ungraded only</option>" +
       "</select>" +
       '<label class="toggle"><input type="checkbox" data-action-input="toggle-votemode"' +
@@ -897,7 +950,7 @@
     }
 
     if (view.filter === "suggested" && !sugCount)
-      html += '<div class="card muted">No suggestions yet — add notes, or map scenarios to categories in Settings.</div>';
+      html += '<div class="card muted">Nothing from notes yet — add bullets on the Notes tab, or link bullets to lines here.</div>';
 
     CHECKLIST.forEach(function (cat) {
       var visible = cat.lines.filter(function (ln) {
@@ -916,7 +969,7 @@
       html += '<div class="cat open"><div class="cat-head">' + esc(cat.name) +
         '<span class="count">' + graded + "/" + cat.lines.length + " graded</span></div>";
       visible.forEach(function (ln) {
-        html += renderLine(day, ln, day.dismissedRecs[ln.id] ? null : recs[ln.id], expected[ln.id]);
+        html += renderLine(day, ln, openRecs(day, ln.id, recs));
       });
       html += "</div>";
     });
@@ -925,16 +978,23 @@
     return html;
   }
 
-  function renderLine(day, ln, recList, expectedFrom) {
-    var st = day.lines[ln.id] || { status: null, votes: {}, note: "" };
+  function bulletLabel(day, n) {
+    return '<div class="bullet-main"><span class="txt">' + esc(n.text) + "</span>" +
+      '<span class="src">' + (n.scenarioId ? esc(scenarioName(n.scenarioId)) : "General") + "</span></div>";
+  }
+
+  function renderLine(day, ln, recList) {
+    var st = day.lines[ln.id] || { status: null, votes: {}, note: "", noteIds: [] };
     var tally = voteTally(st);
-    var isRec = !!recList;
+    var linked = linkedNotes(day, ln.id);
+    var isRec = recList.length > 0;
+    var dis = day.finalized ? " disabled" : "";
     var html =
       '<div class="line-item' + (isRec ? " recommended" : "") + '">' +
       '<div class="line-meta">' +
       '<span class="badge w' + ln.w + '">×' + ln.w + " " + WEIGHT_LABELS[ln.w] + "</span>" +
-      (isRec ? '<span class="badge rec">★ Note match</span>' : "") +
-      (expectedFrom ? '<span class="badge exp">◆ Expected</span>' : "") +
+      (isRec ? '<span class="badge rec">★ ' + recList.length + " note match" + (recList.length > 1 ? "es" : "") + "</span>" : "") +
+      (linked.length ? '<span class="badge link">🔗 ' + linked.length + " linked</span>" : "") +
       (tally.p + tally.f > 0
         ? '<span class="badge ' +
           (st.status === "pass" ? "pass" : st.status === "fail" ? "fail" : "tie") + '">' +
@@ -944,20 +1004,19 @@
       '<div class="line-text">' + esc(ln.text) + "</div>";
 
     if (isRec) {
-      var why = recList[0];
-      html +=
-        '<div class="rec-why">Note: “' + esc(why.snippet) + "”" +
-        (why.scenarioId ? " — " + esc(scenarioName(why.scenarioId)) : "") +
-        (recList.length > 1 ? " (+" + (recList.length - 1) + " more)" : "") +
-        ' <button class="dismiss" data-action="dismiss-rec" data-id="' + ln.id + '">✕ dismiss</button></div>';
+      html += '<div class="rec-why"><div class="rec-head">Recommended from notes' +
+        (recList.length > 1 && !day.finalized
+          ? ' <button class="dismiss" data-action="dismiss-line-recs" data-id="' + ln.id + '">✕ dismiss all</button>'
+          : "") + "</div><ul class=\"bullets rec-list\">";
+      recList.forEach(function (r) {
+        html += '<li class="bullet"><div class="bullet-row">' + bulletLabel(day, r.note) +
+          (day.finalized ? "" :
+            '<button class="link-btn" data-action="link-note" data-id="' + ln.id + '" data-note="' + r.note.id + '" title="Link to this line">＋ Link</button>' +
+            '<button class="dismiss" data-action="dismiss-rec" data-id="' + ln.id + '" data-note="' + r.note.id + '" title="Dismiss">✕</button>') +
+          "</div></li>";
+      });
+      html += "</ul></div>";
     }
-    if (expectedFrom) {
-      html += '<div class="exp-why">Tested by: ' +
-        expectedFrom.slice(0, 2).map(esc).join(", ") +
-        (expectedFrom.length > 2 ? " +" + (expectedFrom.length - 2) : "") + "</div>";
-    }
-
-    var dis = day.finalized ? " disabled" : "";
 
     if (view.voteMode && day.trainers.length) {
       var mine = view.activeTrainer && st.votes[view.activeTrainer] && st.votes[view.activeTrainer].v;
@@ -990,11 +1049,46 @@
         "</div>";
     }
 
+    if (linked.length) {
+      html += '<div class="linked-notes"><div class="rec-head">Linked observations</div><ul class="bullets">';
+      linked.forEach(function (n) {
+        html += '<li class="bullet"><div class="bullet-row">' + bulletLabel(day, n) +
+          (day.finalized ? "" :
+            '<button class="dismiss" data-action="unlink-note" data-id="' + ln.id + '" data-note="' + n.id + '" title="Unlink">✕</button>') +
+          "</div></li>";
+      });
+      html += "</ul></div>";
+    }
+
+    if (view.openPickers[ln.id] && !day.finalized) {
+      html += '<div class="picker"><div class="spread"><strong class="small">Link observations</strong>' +
+        '<button class="line-note-toggle" data-action="close-picker" data-id="' + ln.id + '">Done</button></div>';
+      var any = false;
+      notesByScenario(day).forEach(function (g) {
+        if (!g.notes.length) return;
+        any = true;
+        html += '<div class="picker-group">' + esc(g.label) + "</div>";
+        g.notes.forEach(function (n) {
+          var on = st.noteIds && st.noteIds.indexOf(n.id) !== -1;
+          html += '<label class="pick-row' + (on ? " on" : "") + '"><input type="checkbox"' + (on ? " checked" : "") +
+            ' data-action-input="pick-note" data-id="' + ln.id + '" data-note="' + n.id + '"><span>' + esc(n.text) + "</span></label>";
+        });
+      });
+      if (!any) html += '<p class="muted small" style="margin:6px 0 0;">No bullets yet — add some on the Notes tab.</p>';
+      html += "</div>";
+    }
+
     if (view.openNotes[ln.id] || st.note) {
-      html += '<div class="line-note"><textarea placeholder="Line notes…" data-action-input="line-note" data-id="' +
+      html += '<div class="line-note"><textarea placeholder="Line note (free text)…" data-action-input="line-note" data-id="' +
         ln.id + '"' + dis + ">" + esc(st.note) + "</textarea></div>";
-    } else {
-      html += '<button class="line-note-toggle" data-action="open-line-note" data-id="' + ln.id + '">＋ Add line note</button>';
+    }
+    if (!day.finalized) {
+      html += '<div class="line-actions">' +
+        (view.openPickers[ln.id] ? "" :
+          '<button class="line-note-toggle" data-action="open-picker" data-id="' + ln.id + '">🔗 Link observations</button>') +
+        (view.openNotes[ln.id] || st.note ? "" :
+          '<button class="line-note-toggle" data-action="open-line-note" data-id="' + ln.id + '">＋ Add line note</button>') +
+        "</div>";
     }
     html += "</div>";
     return html;
@@ -1024,7 +1118,7 @@
       if (sc.criticalFails.length) {
         html +=
           '<div class="card"><h2 style="color:var(--fail);">⚠ Critical Line Failures</h2>' +
-          '<p class="muted small">A failed ×3 Critical line fails the day regardless of the total score.</p><ul class="clean flag-list">';
+          '<p class="muted small">A failed ×2 Critical line fails the day regardless of the total score.</p><ul class="clean flag-list">';
         sc.criticalFails.forEach(function (ln) {
           html += "<li><strong>" + esc(CAT_BY_ID[ln.catId].name) + ":</strong> " + esc(ln.text) + "</li>";
         });
@@ -1047,14 +1141,14 @@
       html += "</div>";
     }
 
-    var pending = Object.keys(recs).filter(function (id) {
-      if (day.dismissedRecs[id]) return false;
-      var st = day.lines[id] && day.lines[id].status;
-      return !st;
-    });
+    var pending = ALL_LINES.filter(function (ln) {
+      var st = day.lines[ln.id] && day.lines[ln.id].status;
+      if (st) return false;
+      return openRecs(day, ln.id, recs).length > 0 || linkedNotes(day, ln.id).length > 0;
+    }).map(function (ln) { return ln.id; });
     if (pending.length) {
-      html += '<div class="card"><h2 style="color:var(--warn);">★ Recommended lines not yet graded</h2>' +
-        '<p class="muted small">Your notes flagged these lines but they have no grade yet:</p><ul class="clean flag-list">';
+      html += '<div class="card"><h2 style="color:var(--warn);">★ Lines from notes not yet graded</h2>' +
+        '<p class="muted small">Your note bullets point at (or are linked to) these lines, but they have no grade yet:</p><ul class="clean flag-list">';
       pending.forEach(function (id) {
         var ln = LINE_BY_ID[id];
         html += "<li>" + esc(CAT_BY_ID[ln.catId].name) + ": " + esc(ln.text) + "</li>";
@@ -1119,23 +1213,31 @@
       cat.lines.forEach(function (ln) {
         var st = day.lines[ln.id] || {};
         var tally = voteTally(st);
-        var noteBits = [];
-        if (tally.p + tally.f > 0) noteBits.push("votes " + tally.p + "–" + tally.f);
-        if (st.note) noteBits.push(st.note);
+        var noteHtml = "";
+        if (tally.p + tally.f > 0) noteHtml += "<div>votes " + tally.p + "–" + tally.f + "</div>";
+        var lk = linkedNotes(day, ln.id);
+        if (lk.length)
+          noteHtml += "<ul>" + lk.map(function (n) {
+            return "<li>" + esc(n.text) + (n.scenarioId ? " <em>(" + esc(scenarioName(n.scenarioId)) + ")</em>" : "") + "</li>";
+          }).join("") + "</ul>";
+        if (st.note) noteHtml += "<div>" + esc(st.note) + "</div>";
         h += "<tr><td class=\"pf-name\">" + esc(ln.text) + " <em>(×" + ln.w + ")</em></td>" +
           '<td class="pf-mark">' + box(st.status === "pass") + "</td>" +
           '<td class="pf-mark">' + box(st.status === "fail") + "</td>" +
           '<td class="pf-mark">' + box(st.status === "no") + "</td>" +
-          '<td class="pf-notes">' + esc(noteBits.join(" — ")) + "</td></tr>";
+          '<td class="pf-notes">' + noteHtml + "</td></tr>";
       });
       h += "</tbody></table>";
     });
 
     if (day.notes.length) {
-      h += '<div class="pf-block"><strong>SCENARIO NOTES:</strong><ul>' +
-        day.notes.map(function (n) {
-          return "<li>[" + (n.scenarioId ? esc(scenarioName(n.scenarioId)) : "General") + "] " + esc(n.text) + "</li>";
-        }).join("") + "</ul></div>";
+      h += '<div class="pf-block"><strong>SCENARIO NOTES:</strong>';
+      notesByScenario(day).forEach(function (g) {
+        if (!g.notes.length) return;
+        h += "<div><em>" + esc(g.label) + "</em><ul>" +
+          g.notes.map(function (n) { return "<li>" + esc(n.text) + "</li>"; }).join("") + "</ul></div>";
+      });
+      h += "</div>";
     }
     h += '<div class="pf-block"><strong>OTHER NOTES:</strong><div class="pf-other">' +
       (esc(day.otherNotes) || "&nbsp;") + "</div></div>";
@@ -1184,14 +1286,19 @@
               : "") + ")"
           : "";
         out.push("  [" + mark + "] (x" + ln.w + ") " + ln.text + votes);
+        linkedNotes(day, ln.id).forEach(function (n) {
+          out.push("         • " + n.text + (n.scenarioId ? " (" + scenarioName(n.scenarioId) + ")" : ""));
+        });
         if (st.note) out.push("         note: " + st.note);
       });
       out.push("");
     });
     if (day.notes.length) {
       out.push("SCENARIO NOTES:");
-      day.notes.forEach(function (n) {
-        out.push("  • [" + (n.scenarioId ? scenarioName(n.scenarioId) : "General") + "] " + n.text);
+      notesByScenario(day).forEach(function (g) {
+        if (!g.notes.length) return;
+        out.push("  " + g.label);
+        g.notes.forEach(function (n) { out.push("    • " + n.text); });
       });
       out.push("");
     }
@@ -1205,17 +1312,25 @@
   /* ============================================================
      VOICE DICTATION
      ============================================================ */
-  var recog = null, recogActive = false;
-  function toggleMic() {
+  var recog = null, recogActive = false, recogTarget = null;
+  function micButtons() {
+    return Array.prototype.slice.call(document.querySelectorAll(".mic-btn"));
+  }
+  function stopMic() {
+    recogActive = false;
+    recogTarget = null;
+    if (recog) { try { recog.stop(); } catch (e) { /* already stopped */ } }
+    micButtons().forEach(function (b) { b.classList.remove("rec"); });
+  }
+  /* each scenario's bullet box has its own 🎤; only one listens at a time */
+  function toggleMic(targetId) {
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    var btn = document.getElementById("mic-btn");
-    var ta = document.getElementById("note-text");
+    var ta = document.getElementById(targetId);
     if (!SR || !ta) return;
     if (recogActive) {
-      recogActive = false;
-      if (recog) recog.stop();
-      if (btn) btn.classList.remove("rec");
-      return;
+      var same = recogTarget === targetId;
+      stopMic();
+      if (same) return;
     }
     recog = new SR();
     recog.continuous = true;
@@ -1225,26 +1340,24 @@
       var txt = "";
       for (var i = ev.resultIndex; i < ev.results.length; i++)
         if (ev.results[i].isFinal) txt += ev.results[i][0].transcript;
-      var el = document.getElementById("note-text");
+      var el = document.getElementById(recogTarget);
       if (el && txt) el.value = (el.value ? el.value.trim() + " " : "") + txt.trim();
     };
-    recog.onend = function () {
-      recogActive = false;
-      var b = document.getElementById("mic-btn");
-      if (b) b.classList.remove("rec");
-    };
+    recog.onend = function () { stopMic(); };
     recog.onerror = function (ev) {
-      recogActive = false;
-      var b = document.getElementById("mic-btn");
-      if (b) b.classList.remove("rec");
+      stopMic();
       if (ev.error === "not-allowed") toast("Microphone permission denied");
     };
     try {
       recog.start();
       recogActive = true;
-      if (btn) btn.classList.add("rec");
+      recogTarget = targetId;
+      micButtons().forEach(function (b) {
+        b.classList.toggle("rec", b.getAttribute("data-target") === targetId);
+      });
       toast("Listening… tap 🎤 again to stop");
     } catch (e) {
+      stopMic();
       toast("Could not start dictation");
     }
   }
@@ -1280,7 +1393,7 @@
       case "open-day":
         view.screen = "day";
         view.dayId = el.getAttribute("data-id");
-        view.tab = "setup"; view.filter = "all"; view.openNotes = {};
+        view.tab = "setup"; view.filter = "all"; view.openNotes = {}; view.openPickers = {};
         render();
         break;
 
@@ -1362,32 +1475,41 @@
         break;
 
       /* ----- notes ----- */
-      case "toggle-mic": toggleMic(); break;
+      case "toggle-mic": toggleMic(el.getAttribute("data-target")); break;
 
       case "add-note": {
-        var txtEl = document.getElementById("note-text");
-        var scnEl = document.getElementById("note-scenario");
-        var txt = txtEl ? txtEl.value.trim() : "";
-        if (!txt) { toast("Write an observation first"); break; }
-        if (recogActive) toggleMic();
-        day.notes.push({
-          id: uid(),
-          scenarioId: scnEl && scnEl.value ? scnEl.value : null,
-          text: txt,
-          ts: nowISO(),
+        if (!day || day.finalized) break;
+        var scn = el.getAttribute("data-scn") || null;
+        var txtEl = document.getElementById("note-text-" + (scn || "general"));
+        var bullets = splitBullets(txtEl ? txtEl.value : "");
+        if (!bullets.length) { toast("Write an observation first"); break; }
+        if (recogActive) stopMic();
+        var hitLines = 0;
+        bullets.forEach(function (t) {
+          day.notes.push({ id: uid(), scenarioId: scn, text: t, ts: nowISO() });
+          hitLines += recsForNoteText(t).length;
         });
         saveDay(day);
-        var hits = recsForNoteText(txt);
         rerenderKeepScroll();
-        toast(hits.length
-          ? "Note saved — " + hits.length + " line" + (hits.length > 1 ? "s" : "") + " recommended for grading"
-          : "Note saved");
+        var focusEl = document.getElementById("note-text-" + (scn || "general"));
+        if (focusEl) focusEl.focus();
+        toast((bullets.length > 1 ? bullets.length + " bullets saved" : "Bullet saved") +
+          (hitLines ? " — " + hitLines + " line" + (hitLines > 1 ? "s" : "") + " recommended for grading" : ""));
         break;
       }
 
       case "del-note": {
+        if (!day || day.finalized) break;
         var nid = el.getAttribute("data-id");
         day.notes = day.notes.filter(function (n) { return n.id !== nid; });
+        // drop any links / per-bullet dismissals that pointed at it
+        Object.keys(day.lines).forEach(function (lid) {
+          var lsn = day.lines[lid];
+          if (lsn.noteIds) lsn.noteIds = lsn.noteIds.filter(function (x) { return x !== nid; });
+        });
+        Object.keys(day.dismissedRecs).forEach(function (k) {
+          if (k.indexOf("|" + nid) !== -1) delete day.dismissedRecs[k];
+        });
         saveDay(day);
         rerenderKeepScroll();
         break;
@@ -1448,11 +1570,37 @@
       }
 
       case "dismiss-rec":
-        if (day) {
+        if (day && !day.finalized) {
+          day.dismissedRecs[el.getAttribute("data-id") + "|" + el.getAttribute("data-note")] = true;
+          saveDay(day);
+          rerenderKeepScroll();
+        }
+        break;
+
+      case "dismiss-line-recs":
+        if (day && !day.finalized) {
           day.dismissedRecs[el.getAttribute("data-id")] = true;
           saveDay(day);
           rerenderKeepScroll();
         }
+        break;
+
+      case "link-note":
+      case "unlink-note": {
+        if (!day || day.finalized) break;
+        setNoteLink(day, el.getAttribute("data-id"), el.getAttribute("data-note"), action === "link-note");
+        rerenderKeepScroll();
+        break;
+      }
+
+      case "open-picker":
+        view.openPickers[el.getAttribute("data-id")] = true;
+        rerenderKeepScroll();
+        break;
+
+      case "close-picker":
+        delete view.openPickers[el.getAttribute("data-id")];
+        rerenderKeepScroll();
         break;
 
       case "open-line-note":
@@ -1500,13 +1648,6 @@
         break;
 
       /* ----- settings: scenario library ----- */
-      case "toggle-lib": {
-        var lid = el.getAttribute("data-id");
-        view.libOpen[lid] = !view.libOpen[lid];
-        rerenderKeepScroll();
-        break;
-      }
-
       case "add-scenario": {
         var inp = document.getElementById("new-scn-name");
         var name = inp ? inp.value.trim() : "";
@@ -1515,7 +1656,7 @@
         DB.scenarios.push(ns);
         saveScenario(ns);
         rerenderKeepScroll();
-        toast("Scenario added — tap it to map categories");
+        toast("Scenario added");
         break;
       }
 
@@ -1702,20 +1843,21 @@
       }
       saveDay(day);
       rerenderKeepScroll();
-    } else if (action === "toggle-scn-cat") {
-      var s = scenarioById(el.getAttribute("data-id"));
-      if (s) {
-        var cid = el.getAttribute("data-cat");
-        if (el.checked) {
-          if (s.cats.indexOf(cid) === -1) s.cats.push(cid);
-        } else {
-          s.cats = s.cats.filter(function (c) { return c !== cid; });
-        }
-        saveScenario(s);
-        rerenderKeepScroll();
-      }
+    } else if (action === "pick-note" && day && !day.finalized) {
+      setNoteLink(day, el.getAttribute("data-id"), el.getAttribute("data-note"), el.checked);
+      rerenderKeepScroll();
     }
   });
+
+  /* tie / untie a note bullet to a checklist line */
+  function setNoteLink(day, lineId, noteId, on) {
+    var ls = lineState(day, lineId);
+    var idx = ls.noteIds.indexOf(noteId);
+    if (on && idx === -1) ls.noteIds.push(noteId);
+    if (!on && idx !== -1) ls.noteIds.splice(idx, 1);
+    if (on) delete day.dismissedRecs[lineId + "|" + noteId];
+    saveDay(day);
+  }
 
   /* ---------- sync hookup ---------- */
   if (window.SBTSync) {
