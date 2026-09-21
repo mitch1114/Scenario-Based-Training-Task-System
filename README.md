@@ -10,17 +10,20 @@ Training Task Sheet**. It digitizes the paper form and is built around grading a
    evaluated, add the observing trainers by name, then pick the day's scenarios
    from the dropdown. The scenarios stay attached to the record so you can
    always look back at what the day covered.
-2. **Notes** — After each scenario, jot quick observations (typed or dictated
-   with the 🎤 button) and tag them to a scenario. The tool scans each note for
-   keywords and **recommends which checklist lines to grade** (★ Note match).
-   Scenarios also declare which skill categories they test, so those lines are
-   pre-suggested too (◆ Expected). Bad suggestion? Dismiss it.
+2. **Notes** — Every scenario on the day gets its own **bullet list**. After
+   each scenario, add short observations (typed or dictated with the 🎤
+   button); each new line becomes its own bullet. The tool scans each bullet
+   for keywords and **recommends which checklist lines to grade** (★ Note
+   match). Bad suggestion? Dismiss it, per bullet or for the whole line.
 3. **Grade** — At the end of the day the trainers vote each line
-   **Pass / Fail / N-O (not observed)**. In **Vote mode**, votes are recorded
-   **by trainer name**: each trainer selects themselves and taps 👍/👎 per line.
-   The majority sets the result, ties stay open, and every trainer's vote shows
-   next to the line. Not every line has to be graded — ungraded and N/O lines
-   simply don't count.
+   **Pass / Fail / N-O (not observed)**. Recommended bullets show under the
+   line; tap **＋ Link** to tie a bullet to that line, or use **🔗 Link
+   observations** to pick any bullet from any scenario. Linked bullets print
+   in the line's Notes column on the official form. In **Vote mode**, votes
+   are recorded **by trainer name**: each trainer selects themselves and taps
+   👍/👎 per line. The majority sets the result, ties stay open, and every
+   trainer's vote shows next to the line. Not every line has to be graded —
+   ungraded and N/O lines simply don't count.
 4. **Results** — A weighted total with category breakdown, critical-failure
    flags, the scenario list, and export: **print the filled-in official form**
    (save as PDF from the print dialog) or copy a plain-text summary.
@@ -33,12 +36,13 @@ Training Task Sheet**. It digitizes the paper form and is built around grading a
 
 | Weight | Meaning | Examples |
 |--------|---------|----------|
-| ×3 Critical | Safety, legal authority, use of force | Miranda, weapon control, ceased force when controlled |
-| ×2 Core | Standard performance expectations | Radio traffic, report writing, separating parties |
+| ×2 Critical | Safety, legal authority, use of force, scene control, de-escalation fundamentals | Miranda, weapon control, slowed the situation, established scene control, separated parties |
+| ×1 Standard | Standard performance expectations | Radio traffic, report writing, articulating RAS/PC on a search |
 
 **Day score = weighted points passed ÷ weighted points graded.** The day passes
 when the score meets the threshold (default 80%, adjustable in Settings) **and**
-no ×3 Critical line was failed. Weights live in `js/data.js` and are easy to tune.
+no Critical line was failed. Weights live in `js/data.js` and are easy to tune;
+`CRITICAL_WEIGHT` there is the single cut-off for the fail-the-day rule.
 
 ## Running it
 
@@ -85,7 +89,6 @@ Settings → Data → **Export backup** downloads everything as JSON;
 ## Customizing
 
 - **Scenario library** — Settings → Scenario Library: add/rename/remove
-  scenarios and tap one to map which skill categories it tests. The defaults
-  are placeholders — replace them with your department's actual scenario list.
+  scenarios. The defaults are the Dublin PD master list.
 - **Line weights & note keywords** — edit `js/data.js`.
 - **Passing threshold** — Settings → Grading.
