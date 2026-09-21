@@ -1,6 +1,6 @@
 /* Service worker: cache-first app shell so the tool works offline
    at training sites. Bump CACHE_VERSION when shipping changes. */
-var CACHE_VERSION = "sbt-v4";
+var CACHE_VERSION = "sbt-v5";
 var SHELL = [
   "./",
   "./index.html",

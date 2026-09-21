@@ -16,21 +16,22 @@ Training Task Sheet**. It digitizes the paper form and is built around grading a
    for keywords and **recommends which checklist lines to grade** (★ Note
    match). Bad suggestion? Dismiss it, per bullet or for the whole line.
 3. **Grade** — At the end of the day the trainers vote each line
-   **Pass / Fail / N-O (not observed)**. Recommended bullets show under the
+   **Met Standard / Needs Improvement / N-O (not observed)**. Recommended bullets show under the
    line; tap **＋ Link** to tie a bullet to that line, or use **🔗 Link
    observations** to pick any bullet from any scenario. Linked bullets print
    in the line's Notes column on the official form. In **Vote mode**, votes
    are recorded **by trainer name**: each trainer selects themselves and taps
    👍/👎 per line. The majority sets the result, ties stay open, and every
-   trainer's vote shows next to the line. Not every line has to be graded —
+   trainer's vote shows next to the line. (Internally the app still stores
+   these as `pass` / `fail`, so older saved days and synced votes carry over.) Not every line has to be graded —
    ungraded and N/O lines simply don't count.
-4. **Results** — A weighted total with category breakdown, critical-failure
-   flags, the scenario list, and export: **print the filled-in official form**
+4. **Results** — A weighted total with category breakdown, flags for any
+   Critical line marked Needs Improvement, the scenario list, and export: **print the filled-in official form**
    (save as PDF from the print dialog) or copy a plain-text summary.
    Finalizing locks the record.
 5. **Officer profiles (👤 on the home screen)** — every officer gets a profile
    automatically: score trend across training days, days passed, and repeat
-   problem areas (lines failed on multiple days).
+   problem areas (lines marked Needs Improvement on multiple days).
 
 ## Weighted grading
 
@@ -39,9 +40,9 @@ Training Task Sheet**. It digitizes the paper form and is built around grading a
 | ×2 Critical | Safety, legal authority, use of force, scene control, de-escalation fundamentals | Miranda, weapon control, slowed the situation, established scene control, separated parties |
 | ×1 Standard | Standard performance expectations | Radio traffic, report writing, articulating RAS/PC on a search |
 
-**Day score = weighted points passed ÷ weighted points graded.** The day passes
-when the score meets the threshold (default 80%, adjustable in Settings) **and**
-no Critical line was failed. Weights live in `js/data.js` and are easy to tune;
+**Day score = weighted points that met standard ÷ weighted points graded.** The
+day passes when the score meets the threshold (default 80%, adjustable in
+Settings) **and** no Critical line was marked Needs Improvement. Weights live in `js/data.js` and are easy to tune;
 `CRITICAL_WEIGHT` there is the single cut-off for the fail-the-day rule.
 
 ## Running it

@@ -633,7 +633,7 @@
     if (topFails.length) {
       html += '<div class="card"><h2>Repeat Problem Areas</h2><ul class="clean flag-list">';
       topFails.forEach(function (x) {
-        html += "<li><strong>" + x.n + "× failed</strong> — " +
+        html += "<li><strong>" + x.n + "× needs improvement</strong> — " +
           esc(CAT_BY_ID[x.ln.catId].name) + ": " + esc(x.ln.text) + "</li>";
       });
       html += "</ul></div>";
@@ -689,7 +689,7 @@
       '" data-action-input="set-threshold"></label>' +
       '<p class="muted">Line weights: <span class="badge w2">×2 Critical</span> safety, legal authority, use-of-force, scene-control &amp; de-escalation lines · ' +
       '<span class="badge w1">×1 Standard</span> all other lines. ' +
-      "Day score = weighted points passed ÷ weighted points graded. Ungraded and N/O lines are excluded. A failed Critical line fails the day.</p></div>";
+      "Day score = weighted points passed ÷ weighted points graded. Ungraded and N/O lines are excluded. A Critical line marked Needs Improvement fails the day.</p></div>";
 
     // Shared backend
     var syncAvailable = typeof window.supabase !== "undefined";
@@ -918,7 +918,7 @@
     html +=
       '<div class="progress-wrap"><div class="spread"><strong class="small">' +
       sc.gradedCount + " of " + ALL_LINES.length + " lines graded</strong>" +
-      '<span class="muted small">' + sc.passCount + " pass · " + sc.failCount + " fail · " + sc.noCount + " n/o</span></div>" +
+      '<span class="muted small">' + sc.passCount + " met · " + sc.failCount + " needs impr. · " + sc.noCount + " n/o</span></div>" +
       '<div class="progress-bar"><div style="width:' +
       Math.round(((sc.gradedCount + sc.noCount) / ALL_LINES.length) * 100) + '%"></div></div></div>';
 
@@ -945,7 +945,7 @@
             return '<button class="chip pick' + (view.activeTrainer === t ? " sel" : "") +
               '" data-action="pick-trainer" data-name="' + esc(t) + '">' + esc(t) + "</button>";
           }).join("") +
-          '</div><p class="muted small" style="margin:6px 0 0;">Each trainer selects themselves, then taps 👍/👎 per line. Majority sets the result; ties stay open. Tap your vote again to withdraw it.</p></div>';
+          '</div><p class="muted small" style="margin:6px 0 0;">Each trainer selects themselves, then taps 👍 Met / 👎 Needs Improvement per line. Majority sets the result; ties stay open. Tap your vote again to withdraw it.</p></div>';
       }
     }
 
@@ -1023,9 +1023,9 @@
       html +=
         '<div class="votes">' +
         '<button' + dis + ' class="vbtn vp' + (mine === "pass" ? " sel" : "") +
-        '" data-action="vote" data-id="' + ln.id + '" data-v="pass">👍 Pass <span class="n">' + tally.p + "</span></button>" +
+        '" data-action="vote" data-id="' + ln.id + '" data-v="pass">👍 Met <span class="n">' + tally.p + "</span></button>" +
         '<button' + dis + ' class="vbtn vf' + (mine === "fail" ? " sel" : "") +
-        '" data-action="vote" data-id="' + ln.id + '" data-v="fail">👎 Fail <span class="n">' + tally.f + "</span></button>" +
+        '" data-action="vote" data-id="' + ln.id + '" data-v="fail">👎 Needs Impr. <span class="n">' + tally.f + "</span></button>" +
         '<button' + dis + ' class="vbtn vno' + (st.status === "no" ? " sel" : "") +
         '" data-action="set-status" data-id="' + ln.id + '" data-status="no">N/O</button>' +
         "</div>";
@@ -1041,9 +1041,9 @@
       html +=
         '<div class="seg">' +
         '<button' + dis + ' class="' + (st.status === "pass" ? "on-pass" : "") +
-        '" data-action="set-status" data-id="' + ln.id + '" data-status="pass">PASS</button>' +
+        '" data-action="set-status" data-id="' + ln.id + '" data-status="pass">MET STANDARD</button>' +
         '<button' + dis + ' class="' + (st.status === "fail" ? "on-fail" : "") +
-        '" data-action="set-status" data-id="' + ln.id + '" data-status="fail">FAIL</button>' +
+        '" data-action="set-status" data-id="' + ln.id + '" data-status="fail">NEEDS IMPROVEMENT</button>' +
         '<button' + dis + ' class="' + (st.status === "no" ? "on-no" : "") +
         '" data-action="set-status" data-id="' + ln.id + '" data-status="no">N/O</button>' +
         "</div>";
@@ -1111,14 +1111,14 @@
         '<div class="big" style="color:' + (passDay ? "var(--pass)" : "var(--fail)") + ';">' + sc.pct + "%</div>" +
         '<div class="verdict ' + (passDay ? "pass" : "fail") + '">' + (passDay ? "DAY PASSED" : "DAY NOT PASSED") + "</div>" +
         '<div class="sub">' + sc.earned + " of " + sc.possible + " weighted points · threshold " + DB.settings.threshold + "%" +
-        (sc.criticalFails.length ? " · " + sc.criticalFails.length + " critical fail" + (sc.criticalFails.length > 1 ? "s" : "") : "") + "</div>" +
-        '<div class="sub">' + sc.passCount + " passed · " + sc.failCount + " failed · " + sc.noCount +
+        (sc.criticalFails.length ? " · " + sc.criticalFails.length + " critical line" + (sc.criticalFails.length > 1 ? "s" : "") + " needing improvement" : "") + "</div>" +
+        '<div class="sub">' + sc.passCount + " met standard · " + sc.failCount + " needs improvement · " + sc.noCount +
         " not observed · " + (ALL_LINES.length - sc.gradedCount - sc.noCount) + " ungraded</div></div>";
 
       if (sc.criticalFails.length) {
         html +=
-          '<div class="card"><h2 style="color:var(--fail);">⚠ Critical Line Failures</h2>' +
-          '<p class="muted small">A failed ×2 Critical line fails the day regardless of the total score.</p><ul class="clean flag-list">';
+          '<div class="card"><h2 style="color:var(--fail);">⚠ Critical Lines Needing Improvement</h2>' +
+          '<p class="muted small">A ×2 Critical line marked Needs Improvement fails the day regardless of the total score.</p><ul class="clean flag-list">';
         sc.criticalFails.forEach(function (ln) {
           html += "<li><strong>" + esc(CAT_BY_ID[ln.catId].name) + ":</strong> " + esc(ln.text) + "</li>";
         });
@@ -1204,12 +1204,12 @@
     if (sc.pct !== null) {
       h += '<div class="pf-score">DAY RESULT: <strong>' + (passDay ? "PASS" : "FAIL") + "</strong> — " +
         sc.pct + "% (" + sc.earned + "/" + sc.possible + " weighted points, threshold " + DB.settings.threshold + "%)" +
-        (sc.criticalFails.length ? " — " + sc.criticalFails.length + " CRITICAL FAILURE(S)" : "") + "</div>";
+        (sc.criticalFails.length ? " — " + sc.criticalFails.length + " CRITICAL LINE(S) NEEDING IMPROVEMENT" : "") + "</div>";
     }
 
     CHECKLIST.forEach(function (cat) {
       h += '<table class="pf-cat"><thead><tr><th class="pf-name">' + esc(cat.name).toUpperCase() +
-        "</th><th>PASS</th><th>FAIL</th><th>N/O</th><th class=\"pf-notes\">NOTES</th></tr></thead><tbody>";
+        "</th><th>MET<br>STANDARD</th><th>NEEDS<br>IMPROVEMENT</th><th>N/O</th><th class=\"pf-notes\">NOTES</th></tr></thead><tbody>";
       cat.lines.forEach(function (ln) {
         var st = day.lines[ln.id] || {};
         var tally = voteTally(st);
@@ -1261,9 +1261,9 @@
     if (sc.pct !== null) {
       out.push("DAY RESULT: " + (dayPassed(day, sc) ? "PASS" : "FAIL") + " — " + sc.pct + "% (" +
         sc.earned + "/" + sc.possible + " weighted points, threshold " + DB.settings.threshold + "%)");
-      if (sc.criticalFails.length) out.push("Critical failures: " + sc.criticalFails.length);
+      if (sc.criticalFails.length) out.push("Critical lines needing improvement: " + sc.criticalFails.length);
     } else out.push("DAY RESULT: not graded");
-    out.push("Lines: " + sc.passCount + " pass, " + sc.failCount + " fail, " +
+    out.push("Lines: " + sc.passCount + " met standard, " + sc.failCount + " needs improvement, " +
       sc.noCount + " not observed, " + (ALL_LINES.length - sc.gradedCount - sc.noCount) + " ungraded");
     out.push("");
     CHECKLIST.forEach(function (cat) {
@@ -1275,13 +1275,13 @@
       cat.lines.forEach(function (ln) {
         var st = day.lines[ln.id];
         if (!st || !st.status) return;
-        var mark = st.status === "pass" ? "PASS" : st.status === "fail" ? "FAIL" : "N/O ";
+        var mark = st.status === "pass" ? "MET" : st.status === "fail" ? "NI " : "N/O";
         var tally = voteTally(st);
         var votes = tally.p + tally.f > 0
           ? " (votes " + tally.p + "-" + tally.f +
             (Object.keys(st.votes).length
               ? ": " + Object.keys(st.votes).map(function (t) {
-                  return t + "=" + st.votes[t].v;
+                  return t + "=" + (st.votes[t].v === "pass" ? "met" : "needs-improvement");
                 }).join(", ")
               : "") + ")"
           : "";
